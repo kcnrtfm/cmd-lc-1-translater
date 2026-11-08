@@ -6,7 +6,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
-from app.transform import RelativeEncoderToAbsolute
+from app.transform import EncoderStepCounter, RelativeEncoderToAbsolute
 
 
 class MonitorLog(RichLog, can_focus=False):
@@ -27,6 +27,7 @@ class MidiApp(App):
         ("c", "connect_ports", "Conectar"),
         ("d", "disconnect_ports", "Desconectar"),
         ("e", "toggle_encoder_absolute", "Encoders -> absoluto"),
+        ("n", "toggle_encoder_counter", "Contar pasos"),
     ]
 
     CSS = """
@@ -38,6 +39,7 @@ class MidiApp(App):
     Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; background: $panel; color: white; }
     Button:disabled { opacity: 1; background: $panel; color: white; border: ascii $accent; }
     #encoder-absolute { min-width: 29; margin-left: 2; }
+    #encoder-counter { min-width: 22; }
     Button:focus { border: ascii #888888; background: #666666; color: white; }
     Select:focus { border: ascii #888888; }
     Select:focus > SelectCurrent { background: #555555; color: white; }
@@ -57,6 +59,7 @@ class MidiApp(App):
         self.encoder_transform = RelativeEncoderToAbsolute()
         self.router = MidiRouter(self._input_message, self._output_message, self.encoder_transform.process)
         self.encoder_absolute = False
+        self.encoder_counter = EncoderStepCounter()
 
     def compose(self) -> ComposeResult:
         with Vertical(id="controls"):
@@ -71,6 +74,7 @@ class MidiApp(App):
                 yield Button("(C)onectar", id="connect")
                 yield Button("(D)esconectar", id="disconnect", disabled=True)
                 yield Button("[ ] (E)ncoders -> absoluto", id="encoder-absolute")
+                yield Button("[ ] Co(N)tar pasos: 0", id="encoder-counter")
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
@@ -110,6 +114,8 @@ class MidiApp(App):
             self.action_disconnect_ports()
         elif event.button.id == "encoder-absolute":
             self.action_toggle_encoder_absolute()
+        elif event.button.id == "encoder-counter":
+            self.action_toggle_encoder_counter()
 
     def action_refresh_ports(self) -> None:
         try:
@@ -143,12 +149,18 @@ class MidiApp(App):
         return str(message)
 
     def _input_message(self, message) -> None:
+        count = self.encoder_counter.process(message)
+        if self.encoder_counter.enabled:
+            self.post_message(MidiEvent("counter", str(count)))
         self.post_message(MidiEvent("input", self._format_message(message)))
 
     def _output_message(self, message) -> None:
         self.post_message(MidiEvent("output", self._format_message(message)))
 
     def on_midi_event(self, event: MidiEvent) -> None:
+        if event.direction == "counter":
+            self.query_one("#encoder-counter", Button).label = f"[X] Co(N)tar pasos: {event.detail}"
+            return
         self.query_one(f"#{event.direction}-log", RichLog).write(event.detail)
 
     def action_toggle_encoder_absolute(self) -> None:
@@ -156,6 +168,13 @@ class MidiApp(App):
         self.encoder_transform.enabled = self.encoder_absolute
         marker = "X" if self.encoder_absolute else " "
         self.query_one("#encoder-absolute", Button).label = f"[{marker}] (E)ncoders -> absoluto"
+
+    def action_toggle_encoder_counter(self) -> None:
+        self.encoder_counter.enabled = not self.encoder_counter.enabled
+        if self.encoder_counter.enabled:
+            self.encoder_counter.reset()
+        marker = "X" if self.encoder_counter.enabled else " "
+        self.query_one("#encoder-counter", Button).label = f"[{marker}] Co(N)tar pasos: {self.encoder_counter.count}"
 
     def on_unmount(self) -> None:
         self.router.disconnect()
