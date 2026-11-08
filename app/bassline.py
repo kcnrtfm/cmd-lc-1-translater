@@ -8,9 +8,8 @@ import mido
 
 
 class BassLineGenerator:
-    STEPS = 16
-    CLOCKS_PER_STEP = 6  # MIDI Clock is 24 PPQN; six clocks = one sixteenth note.
-    NOTE_OFF_CLOCK = 4
+    MAX_STEPS = 16
+    CLOCKS_PER_BAR = 96  # 24 PPQN * 4 beats
 
     SCALE_INTERVALS = (0, 3, 5, 7, 10)
 
@@ -22,6 +21,7 @@ class BassLineGenerator:
         self.pattern: list[int | None] = []
         self.pattern_offsets: list[int | None] = []
         self.channel = 0
+        self.steps_per_bar = 16
 
         self.transport_running = False
         self.step_index = 0
@@ -51,6 +51,22 @@ class BassLineGenerator:
         self.pattern_offsets = self._generate_pattern_offsets()
         if self.seed_note is not None:
             self.pattern = self._transpose_pattern(self.seed_note)
+
+    def set_steps_per_bar(self, steps: int) -> None:
+        if steps not in (1, 2, 4, 8, 16):
+            raise ValueError("steps must be one of 1, 2, 4, 8, 16")
+
+        self.steps_per_bar = steps
+        self.step_index %= steps
+        self.clock_in_step = 0
+
+    @property
+    def clocks_per_step(self) -> int:
+        return self.CLOCKS_PER_BAR // self.steps_per_bar
+
+    @property
+    def note_off_clock(self) -> int:
+        return max(1, round(self.clocks_per_step * 2 / 3))
 
     def process_transport(self, message: mido.Message) -> None:
         if message.type == "start":
@@ -87,17 +103,17 @@ class BassLineGenerator:
 
         self.clock_in_step += 1
 
-        if self.clock_in_step == self.NOTE_OFF_CLOCK:
+        if self.clock_in_step == self.note_off_clock:
             self._note_off()
 
-        if self.clock_in_step >= self.CLOCKS_PER_STEP:
+        if self.clock_in_step >= self.clocks_per_step:
             self.clock_in_step = 0
-            self.step_index = (self.step_index + 1) % self.STEPS
+            self.step_index = (self.step_index + 1) % self.steps_per_bar
 
     def _generate_pattern_offsets(self) -> list[int | None]:
         pattern: list[int | None] = []
 
-        for step in range(self.STEPS):
+        for step in range(self.MAX_STEPS):
             if step == 0:
                 pattern.append(0)
                 continue
