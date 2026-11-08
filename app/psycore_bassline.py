@@ -55,9 +55,9 @@ class PsycoreBassLineGenerator:
         if self.seed_note is not None:
             self.pattern = self._transpose_pattern(self.seed_note)
 
-    def process_link_beat(self, beat: float, playing: bool = True) -> None:
+    def process_link_beat(self, beat: float) -> None:
         """Trigger the pattern from the absolute Ableton Link beat position."""
-        if not self.enabled or not self.pattern or not playing:
+        if not self.enabled or not self.pattern:
             self._note_off()
             self.last_step = None
             return
