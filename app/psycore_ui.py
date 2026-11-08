@@ -214,7 +214,7 @@ class PsycoreBassLinerApp(App):
 
         while True:
             beat = await self.link.sync(0.25)
-            self.bass_generator.process_link_beat(beat, self.link.playing)
+            self.bass_generator.process_link_beat(beat)
 
     def _controller_state_changed(self, state: dict[str, object]) -> None:
         generator = "ON" if state["generator_enabled"] else "OFF"
