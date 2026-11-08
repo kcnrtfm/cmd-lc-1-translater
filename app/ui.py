@@ -8,6 +8,10 @@ from textual.widgets import Button, Label, RichLog, Select, Static
 from app.midi import MidiRouter
 
 
+class MonitorLog(RichLog, can_focus=False):
+    """Read-only MIDI monitor excluded from keyboard focus."""
+
+
 class MidiEvent(Message):
     def __init__(self, direction: str, detail: str) -> None:
         super().__init__()
@@ -25,8 +29,12 @@ class MidiApp(App):
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
     Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; }
-    Button:focus { border: ascii cyan; background: cyan; color: black; }
-    Select:focus { border: ascii cyan; }
+    Button:focus { border: ascii #888888; background: #666666; color: white; }
+    Select:focus { border: ascii #888888; }
+    Select:focus > SelectCurrent { background: #555555; color: white; }
+    SelectOverlay:focus { border: ascii #888888; }
+    SelectOverlay > .option-list--option-highlighted { background: #666666; color: white; }
+    SelectOverlay > .option-list--option-hover { background: #555555; color: white; }
     #actions { height: 3; align: left middle; }
     #status { height: 1; padding-left: 1; }
     #monitors { height: 1fr; }
@@ -55,10 +63,10 @@ class MidiApp(App):
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
                 yield Static("ENTRADA MIDI", classes="monitor-title")
-                yield RichLog(id="input-log", max_lines=500, wrap=False)
+                yield MonitorLog(id="input-log", max_lines=500, wrap=False)
             with Vertical(classes="monitor"):
                 yield Static("SALIDA MIDI", classes="monitor-title")
-                yield RichLog(id="output-log", max_lines=500, wrap=False)
+                yield MonitorLog(id="output-log", max_lines=500, wrap=False)
 
     def on_mount(self) -> None:
         self.refresh_ports()
