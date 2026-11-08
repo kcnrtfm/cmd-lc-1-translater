@@ -259,7 +259,10 @@ class PsycoreBassLinerApp(App):
         self.query_one("#encoder-absolute", Button).label = f"[{marker}] (E)ncoders -> absoluto"
 
     def action_toggle_generator(self) -> None:
-        if self.bass_generator.enabled:
+        pending = self.bass_generator.pending_enabled
+        target_enabled = self.bass_generator.enabled if pending is None else pending
+
+        if target_enabled:
             self.bass_generator.disarm()
         else:
             self.bass_generator.arm()
