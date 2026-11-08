@@ -99,10 +99,11 @@ class MidiInputListener:
 
 
 class DualOutputMidiRouter:
-    def __init__(self, on_input: MessageHandler, on_translated_output: MessageHandler, on_bass_output: MessageHandler) -> None:
+    def __init__(self, on_input: MessageHandler, on_translated_output: MessageHandler, on_bass_output: MessageHandler, processor: MessageProcessor | None = None) -> None:
         self.on_input = on_input
         self.on_translated_output = on_translated_output
         self.on_bass_output = on_bass_output
+        self.processor = processor
         self._input = None
         self._translated_output = None
         self._bass_output = None
@@ -145,7 +146,8 @@ class DualOutputMidiRouter:
             consumed = bool(self.input_handler(message.copy()))
 
         if not consumed:
-            self.send_translated(message.copy())
+            output_message = self.processor(message.copy()) if self.processor else message.copy()
+            self.send_translated(output_message)
 
     def send_translated(self, message: mido.Message) -> None:
         with self._lock:
