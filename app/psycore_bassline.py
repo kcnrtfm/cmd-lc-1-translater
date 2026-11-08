@@ -1,4 +1,4 @@
-"""Four-bar psycore / psytrance rolling bass generator synchronized to MIDI Clock."""
+"""Four-bar psycore / psytrance rolling bass generator synchronized to Ableton Link."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ class PsycoreBassLineGenerator:
     BARS = 4
     STEPS_PER_BAR = 16
     TOTAL_STEPS = BARS * STEPS_PER_BAR
-    CLOCKS_PER_STEP = 6
-    NOTE_OFF_CLOCK = 4
 
     def __init__(self, send_message) -> None:
         self.send_message = send_message
@@ -23,10 +21,8 @@ class PsycoreBassLineGenerator:
         self.pattern: list[int | None] = []
         self.channel = 8
 
-        self.transport_running = False
-        self.step_index = 0
-        self.clock_in_step = 0
         self.active_note: int | None = None
+        self.last_step: int | None = None
 
     @property
     def steps_per_bar(self) -> int:
@@ -59,45 +55,23 @@ class PsycoreBassLineGenerator:
         if self.seed_note is not None:
             self.pattern = self._transpose_pattern(self.seed_note)
 
-    def process_transport(self, message: mido.Message) -> None:
-        if message.type == "start":
-            self.transport_running = True
-            self.step_index = 0
-            self.clock_in_step = 0
+    def process_link_beat(self, beat: float, playing: bool = True) -> None:
+        """Trigger the pattern from the absolute Ableton Link beat position."""
+        if not self.enabled or not self.pattern or not playing:
             self._note_off()
+            self.last_step = None
             return
 
-        if message.type == "continue":
-            self.transport_running = True
+        # Four sixteenth-note steps per beat. Deriving the index from the
+        # absolute Link timeline prevents accumulated drift.
+        absolute_step = int(round(beat * 4))
+        step = absolute_step % self.TOTAL_STEPS
+
+        if step == self.last_step:
             return
 
-        if message.type == "stop":
-            self.transport_running = False
-            self._note_off()
-            return
-
-        if message.type != "clock":
-            return
-
-        if not self.enabled or not self.pattern:
-            return
-
-        if not self.transport_running:
-            self.transport_running = True
-            self.step_index = 0
-            self.clock_in_step = 0
-
-        if self.clock_in_step == 0:
-            self._play_current_step()
-
-        self.clock_in_step += 1
-
-        if self.clock_in_step == self.NOTE_OFF_CLOCK:
-            self._note_off()
-
-        if self.clock_in_step >= self.CLOCKS_PER_STEP:
-            self.clock_in_step = 0
-            self.step_index = (self.step_index + 1) % self.TOTAL_STEPS
+        self.last_step = step
+        self._play_step(step)
 
     def _generate_pattern_offsets(self) -> list[int | None]:
         pattern: list[int | None] = []
@@ -139,9 +113,9 @@ class PsycoreBassLineGenerator:
                 result.append(max(0, min(127, root + offset)))
         return result
 
-    def _play_current_step(self) -> None:
+    def _play_step(self, step: int) -> None:
         self._note_off()
-        note = self.pattern[self.step_index]
+        note = self.pattern[step]
         if note is None:
             return
 
