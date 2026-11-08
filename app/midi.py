@@ -47,6 +47,13 @@ class MidiRouter:
             self._output.send(output_message)
             self.on_output(output_message.copy())
 
+    def send(self, message: mido.Message) -> None:
+        with self._lock:
+            if self._output is None:
+                return
+            self._output.send(message)
+            self.on_output(message.copy())
+
     def disconnect(self) -> None:
         with self._lock:
             input_port, output_port = self._input, self._output
