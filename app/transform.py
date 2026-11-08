@@ -1,0 +1,40 @@
+"""MIDI message transformations."""
+
+import mido
+
+
+class RelativeEncoderToAbsolute:
+    def __init__(
+        self,
+        channel: int = 7,
+        controls: range = range(16, 24),
+        initial_value: int = 64,
+    ) -> None:
+        self.enabled = False
+        self.channel = channel
+        self.controls = set(controls)
+        self.values = {control: initial_value for control in self.controls}
+
+    def process(self, message: mido.Message) -> mido.Message:
+        if not self.enabled:
+            return message
+
+        if (
+            message.type != "control_change"
+            or message.channel != self.channel
+            or message.control not in self.controls
+        ):
+            return message
+
+        if message.value == 65:
+            delta = 1
+        elif message.value == 63:
+            delta = -1
+        else:
+            return message
+
+        current = self.values[message.control]
+        current = max(0, min(127, current + delta))
+        self.values[message.control] = current
+
+        return message.copy(value=current)
