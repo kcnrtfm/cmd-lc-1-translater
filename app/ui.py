@@ -1,10 +1,18 @@
 """Textual interface for MIDI port selection and message monitoring."""
 
 from textual.app import App, ComposeResult
+from textual.message import Message
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
+
+
+class MidiEvent(Message):
+    def __init__(self, direction: str, detail: str) -> None:
+        super().__init__()
+        self.direction = direction
+        self.detail = detail
 
 
 class MidiApp(App):
@@ -12,7 +20,7 @@ class MidiApp(App):
 
     CSS = """
     Screen { layout: vertical; }
-    #controls { height: 7; padding: 1 2; border: solid $accent; }
+    #controls { height: 9; padding: 1 2; border: solid $accent; }
     .port-row { height: 2; align: left middle; }
     .port-label { width: 15; }
     Select { width: 1fr; }
@@ -97,10 +105,13 @@ class MidiApp(App):
         return str(message)
 
     def _input_message(self, message) -> None:
-        self.call_from_thread(self.query_one("#input-log", RichLog).write, self._format_message(message))
+        self.post_message(MidiEvent("input", self._format_message(message)))
 
     def _output_message(self, message) -> None:
-        self.call_from_thread(self.query_one("#output-log", RichLog).write, self._format_message(message))
+        self.post_message(MidiEvent("output", self._format_message(message)))
+
+    def on_midi_event(self, event: MidiEvent) -> None:
+        self.query_one(f"#{event.direction}-log", RichLog).write(event.detail)
 
     def on_unmount(self) -> None:
         self.router.disconnect()
