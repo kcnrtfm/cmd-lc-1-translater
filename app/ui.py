@@ -6,6 +6,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
+from app.transform import RelativeEncoderToAbsolute
 
 
 class MonitorLog(RichLog, can_focus=False):
@@ -53,7 +54,8 @@ class MidiApp(App):
 
     def __init__(self) -> None:
         super().__init__()
-        self.router = MidiRouter(self._input_message, self._output_message)
+        self.encoder_transform = RelativeEncoderToAbsolute()
+        self.router = MidiRouter(self._input_message, self._output_message, self.encoder_transform.process)
         self.encoder_absolute = False
 
     def compose(self) -> ComposeResult:
@@ -151,6 +153,7 @@ class MidiApp(App):
 
     def action_toggle_encoder_absolute(self) -> None:
         self.encoder_absolute = not self.encoder_absolute
+        self.encoder_transform.enabled = self.encoder_absolute
         marker = "X" if self.encoder_absolute else " "
         self.query_one("#encoder-absolute", Button).label = f"[{marker}] (E)ncoders -> absoluto"
 
