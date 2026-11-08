@@ -77,6 +77,7 @@ class PsycoreBassLinerApp(App):
             self.bass_generator,
             self.router.send_bass,
             self._controller_state_changed,
+            audition_notes_while_generating=False,
         )
         self.router.input_handler = self.bass_controller.process
 
