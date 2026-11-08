@@ -6,12 +6,14 @@ from threading import RLock
 import mido
 
 MessageHandler = Callable[[mido.Message], None]
+MessageProcessor = Callable[[mido.Message], mido.Message]
 
 
 class MidiRouter:
-    def __init__(self, on_input: MessageHandler, on_output: MessageHandler) -> None:
+    def __init__(self, on_input: MessageHandler, on_output: MessageHandler, processor: MessageProcessor | None = None) -> None:
         self.on_input = on_input
         self.on_output = on_output
+        self.processor = processor
         self._input = None
         self._output = None
         self._lock = RLock()
@@ -41,8 +43,9 @@ class MidiRouter:
             if self._output is None:
                 return
             self.on_input(message.copy())
-            self._output.send(message)
-            self.on_output(message.copy())
+            output_message = self.processor(message.copy()) if self.processor else message.copy()
+            self._output.send(output_message)
+            self.on_output(output_message.copy())
 
     def disconnect(self) -> None:
         with self._lock:
