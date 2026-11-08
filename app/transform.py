@@ -38,3 +38,26 @@ class RelativeEncoderToAbsolute:
         self.values[message.control] = current
 
         return message.copy(value=current)
+
+
+class EncoderStepCounter:
+    def __init__(self, channel: int = 7, controls: range = range(16, 24)) -> None:
+        self.enabled = False
+        self.channel = channel
+        self.controls = set(controls)
+        self.count = 0
+
+    def process(self, message: mido.Message) -> int:
+        if not self.enabled:
+            return self.count
+        if (
+            message.type == "control_change"
+            and message.channel == self.channel
+            and message.control in self.controls
+            and message.value in (63, 65)
+        ):
+            self.count += 1
+        return self.count
+
+    def reset(self) -> None:
+        self.count = 0
