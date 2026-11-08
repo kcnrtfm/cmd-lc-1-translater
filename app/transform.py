@@ -13,7 +13,9 @@ class RelativeEncoderToAbsolute:
         self.enabled = False
         self.channel = channel
         self.controls = set(controls)
-        self.values = {control: initial_value for control in self.controls}
+        self.values = {control: float(initial_value) for control in self.controls}
+        self.steps_for_full_range = 18
+        self.step_size = 127 / self.steps_for_full_range
 
     def process(self, message: mido.Message) -> mido.Message:
         if not self.enabled:
@@ -34,10 +36,10 @@ class RelativeEncoderToAbsolute:
             return message
 
         current = self.values[message.control]
-        current = max(0, min(127, current + delta))
+        current = max(0.0, min(127.0, current + (delta * self.step_size)))
         self.values[message.control] = current
 
-        return message.copy(value=current)
+        return message.copy(value=round(current))
 
 
 class EncoderStepCounter:
