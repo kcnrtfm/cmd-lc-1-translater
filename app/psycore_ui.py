@@ -4,10 +4,11 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widgets import Button, Label, RichLog, Select, Static
+from aalink import Link
 
 from app.bass_controller import BassController
 from app.psycore_bassline import PsycoreBassLineGenerator
-from app.midi import DualOutputMidiRouter, MidiInputListener
+from app.midi import DualOutputMidiRouter
 from app.transform import RelativeEncoderToAbsolute
 
 
@@ -36,7 +37,7 @@ class PsycoreBassLinerApp(App):
 
     CSS = """
     Screen { layout: vertical; }
-    #controls { height: 16; padding: 1 2; border: ascii $accent; }
+    #controls { height: 14; padding: 1 2; border: ascii $accent; }
     .port-row { height: 2; align: left middle; }
     .port-label { width: 19; }
     Select { width: 1fr; border: ascii $accent; }
@@ -70,7 +71,9 @@ class PsycoreBassLinerApp(App):
             self.encoder_transform.process,
         )
 
-        self.clock_input = MidiInputListener(self._clock_message)
+        self.link = Link(120)
+        self.link.enabled = True
+        self.link.start_stop_sync_enabled = True
         self.bass_generator = PsycoreBassLineGenerator(self.router.send_bass)
         self.bass_controller = BassController(
             self.bass_generator,
@@ -94,10 +97,6 @@ class PsycoreBassLinerApp(App):
             with Horizontal(classes="port-row"):
                 yield Label("Salida BassLiner", classes="port-label")
                 yield Select([], id="bass-port", prompt="BassLiner", compact=True)
-
-            with Horizontal(classes="port-row"):
-                yield Label("Clock MIDI", classes="port-label")
-                yield Select([], id="clock-port", prompt="BassLiner Clock", compact=True)
 
             with Horizontal(id="actions"):
                 yield Button("(A)ctualizar", id="refresh")
@@ -123,13 +122,13 @@ class PsycoreBassLinerApp(App):
 
     def on_mount(self) -> None:
         self.refresh_ports()
+        self.run_worker(self._link_loop(), exclusive=True)
 
     def refresh_ports(self) -> None:
         for widget_id, names in (
             ("input-port", self.router.input_ports()),
             ("translated-port", self.router.output_ports()),
             ("bass-port", self.router.output_ports()),
-            ("clock-port", self.router.input_ports()),
         ):
             selector = self.query_one(f"#{widget_id}", Select)
             previous = selector.value
@@ -142,7 +141,7 @@ class PsycoreBassLinerApp(App):
         self.query_one("#connect", Button).disabled = connected
         self.query_one("#disconnect", Button).disabled = not connected
 
-        for widget_id in ("input-port", "translated-port", "bass-port", "clock-port"):
+        for widget_id in ("input-port", "translated-port", "bass-port"):
             self.query_one(f"#{widget_id}", Select).disabled = connected
 
         if not connected:
@@ -173,17 +172,14 @@ class PsycoreBassLinerApp(App):
         input_name = self.query_one("#input-port", Select).value
         translated_name = self.query_one("#translated-port", Select).value
         bass_name = self.query_one("#bass-port", Select).value
-        clock_name = self.query_one("#clock-port", Select).value
 
-        if not all(isinstance(name, str) for name in (input_name, translated_name, bass_name, clock_name)):
-            self.query_one("#status", Label).update("Seleccioná entrada, dos salidas y clock")
+        if not all(isinstance(name, str) for name in (input_name, translated_name, bass_name)):
+            self.query_one("#status", Label).update("Seleccioná entrada y dos salidas")
             return
 
         try:
             self.router.connect(input_name, translated_name, bass_name)
-            self.clock_input.connect(clock_name)
         except Exception as exc:
-            self.clock_input.disconnect()
             self.router.disconnect()
             self.query_one("#status", Label).update(f"Error: {exc}")
             return
@@ -192,7 +188,6 @@ class PsycoreBassLinerApp(App):
         self.query_one("#status", Label).update("Conectado")
 
     def action_disconnect_ports(self) -> None:
-        self.clock_input.disconnect()
         self.router.disconnect()
         self._set_connected(False)
 
@@ -212,14 +207,19 @@ class PsycoreBassLinerApp(App):
         channel = message.channel + 1 if hasattr(message, "channel") else None
         self.post_message(MidiEvent("bass", self._format_message(message), channel))
 
-    def _clock_message(self, message) -> None:
-        self.bass_generator.process_transport(message)
+    async def _link_loop(self) -> None:
+        while True:
+            beat = await self.link.sync(0.25)
+            self.bass_generator.process_link_beat(beat, self.link.playing)
 
     def _controller_state_changed(self, state: dict[str, object]) -> None:
         generator = "ON" if state["generator_enabled"] else "OFF"
         root = state["root"]
         root_text = "--" if root is None else str(root)
-        detail = f"Generador {generator} | pasos {state['steps']} | octava {state['octave']} | root MIDI {root_text}"
+        detail = (
+            f"Generador {generator} | Link {self.link.tempo:.1f} BPM | "
+            f"peers {self.link.num_peers} | octava {state['octave']} | root MIDI {root_text}"
+        )
         self.post_message(MidiEvent("state", detail))
 
     def on_midi_event(self, event: MidiEvent) -> None:
@@ -258,5 +258,5 @@ class PsycoreBassLinerApp(App):
 
     def on_unmount(self) -> None:
         self.bass_generator.disarm()
-        self.clock_input.disconnect()
+        self.link.enabled = False
         self.router.disconnect()
