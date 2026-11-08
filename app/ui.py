@@ -21,7 +21,12 @@ class MidiEvent(Message):
 
 class MidiApp(App):
     TITLE = "CMD LC-1 Translator"
-    BINDINGS = [("e", "toggle_encoder_absolute", "Encoders -> absoluto")]
+    BINDINGS = [
+        ("a", "refresh_ports", "Actualizar"),
+        ("c", "connect_ports", "Conectar"),
+        ("d", "disconnect_ports", "Desconectar"),
+        ("e", "toggle_encoder_absolute", "Encoders -> absoluto"),
+    ]
 
     CSS = """
     Screen { layout: vertical; }
@@ -60,9 +65,9 @@ class MidiApp(App):
                 yield Label("Salida MIDI", classes="port-label")
                 yield Select([], id="output-port", prompt="Seleccionar salida", compact=True)
             with Horizontal(id="actions"):
-                yield Button("Actualizar", id="refresh")
-                yield Button("Conectar", id="connect")
-                yield Button("Desconectar", id="disconnect", disabled=True)
+                yield Button("(A)ctualizar", id="refresh")
+                yield Button("(C)onectar", id="connect")
+                yield Button("(D)esconectar", id="disconnect", disabled=True)
                 yield Button("[ ] Encoders -> absoluto [E]", id="encoder-absolute")
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
@@ -96,27 +101,40 @@ class MidiApp(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "refresh":
-            try:
-                self.refresh_ports()
-            except Exception as exc:
-                self.query_one("#status", Label).update(f"Error: {exc}")
+            self.action_refresh_ports()
         elif event.button.id == "connect":
-            input_name = self.query_one("#input-port", Select).value
-            output_name = self.query_one("#output-port", Select).value
-            if not isinstance(input_name, str) or not isinstance(output_name, str):
-                self.query_one("#status", Label).update("Seleccioná entrada y salida")
-                return
-            try:
-                self.router.connect(input_name, output_name)
-            except Exception as exc:
-                self.query_one("#status", Label).update(f"Error: {exc}")
-                return
-            self._set_connected(True)
+            self.action_connect_ports()
         elif event.button.id == "disconnect":
-            self.router.disconnect()
-            self._set_connected(False)
+            self.action_disconnect_ports()
         elif event.button.id == "encoder-absolute":
             self.action_toggle_encoder_absolute()
+
+    def action_refresh_ports(self) -> None:
+        try:
+            self.refresh_ports()
+        except Exception as exc:
+            self.query_one("#status", Label).update(f"Error: {exc}")
+
+    def action_connect_ports(self) -> None:
+        if self.router.connected:
+            return
+        input_name = self.query_one("#input-port", Select).value
+        output_name = self.query_one("#output-port", Select).value
+        if not isinstance(input_name, str) or not isinstance(output_name, str):
+            self.query_one("#status", Label).update("Seleccioná entrada y salida")
+            return
+        try:
+            self.router.connect(input_name, output_name)
+        except Exception as exc:
+            self.query_one("#status", Label).update(f"Error: {exc}")
+            return
+        self._set_connected(True)
+
+    def action_disconnect_ports(self) -> None:
+        if not self.router.connected:
+            return
+        self.router.disconnect()
+        self._set_connected(False)
 
     @staticmethod
     def _format_message(message) -> str:
