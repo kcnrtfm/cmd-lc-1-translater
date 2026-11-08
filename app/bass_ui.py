@@ -219,7 +219,7 @@ class BassLinerApp(App):
         generator = "ON" if state["generator_enabled"] else "OFF"
         root = state["root"]
         root_text = "--" if root is None else str(root)
-        detail = f"Generador {generator} | octava {state['octave']} | root MIDI {root_text}"
+        detail = f"Generador {generator} | pasos {state['steps']} | octava {state['octave']} | root MIDI {root_text}"
         self.post_message(MidiEvent("state", detail))
 
     def on_midi_event(self, event: MidiEvent) -> None:
