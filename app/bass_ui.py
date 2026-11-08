@@ -6,6 +6,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
+from app.bassline import BassLineGenerator
 from app.transform import RelativeEncoderToAbsolute
 
 
@@ -60,6 +61,7 @@ class BassLinerApp(App):
         self.encoder_transform = RelativeEncoderToAbsolute()
         self.router = MidiRouter(self._input_message, self._output_message, self.encoder_transform.process)
         self.encoder_absolute = False
+        self.bass_generator = BassLineGenerator(self._send_generated_message)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="controls"):
@@ -149,6 +151,8 @@ class BassLinerApp(App):
         return str(message)
 
     def _input_message(self, message) -> None:
+        if self.bass_generator.accept_seed(message):
+            self.post_message(MidiEvent("generator", f"Loop generado a 120 BPM desde nota {message.note}"))
         channel = message.channel + 1 if hasattr(message, "channel") else None
         self.post_message(MidiEvent("input", self._format_message(message), channel))
 
@@ -157,6 +161,10 @@ class BassLinerApp(App):
         self.post_message(MidiEvent("output", self._format_message(message), channel))
 
     def on_midi_event(self, event: MidiEvent) -> None:
+        if event.direction == "generator":
+            self.query_one("#status", Label).update(event.detail)
+            self.query_one("#bass-generator", Button).label = "[X] (G)enerar bajo"
+            return
         if event.channel is not None:
             self.query_one(f"#{event.direction}-title", Static).update(
                 f"{event.direction.upper()} MIDI - canal: {event.channel}"
@@ -170,7 +178,18 @@ class BassLinerApp(App):
         self.query_one("#encoder-absolute", Button).label = f"[{marker}] (E)ncoders -> absoluto"
 
     def action_generate_bassline(self) -> None:
-        self.query_one("#status", Label).update("Generador listo para configurar")
+        if not self.bass_generator.enabled:
+            self.bass_generator.arm()
+            self.query_one("#bass-generator", Button).label = "[X] (G)enerar bajo"
+            self.query_one("#status", Label).update("Esperando nota semilla - 120 BPM")
+        else:
+            self.bass_generator.disarm()
+            self.query_one("#bass-generator", Button).label = "[ ] (G)enerar bajo"
+            self.query_one("#status", Label).update("Generador detenido")
+
+    def _send_generated_message(self, message) -> None:
+        self.router.send(message)
 
     def on_unmount(self) -> None:
+        self.bass_generator.disarm()
         self.router.disconnect()
