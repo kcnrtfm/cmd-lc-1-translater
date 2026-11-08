@@ -25,6 +25,8 @@ class MidiApp(App):
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
     Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; }
+    Button:focus { border: ascii cyan; background: cyan; color: black; }
+    Select:focus { border: ascii cyan; }
     #actions { height: 3; align: left middle; }
     #status { height: 1; padding-left: 1; }
     #monitors { height: 1fr; }
@@ -47,7 +49,7 @@ class MidiApp(App):
                 yield Select([], id="output-port", prompt="Seleccionar salida", compact=True)
             with Horizontal(id="actions"):
                 yield Button("Actualizar", id="refresh")
-                yield Button("Conectar", variant="primary", id="connect")
+                yield Button("Conectar", id="connect")
                 yield Button("Desconectar", id="disconnect", disabled=True)
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
