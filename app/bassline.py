@@ -23,6 +23,7 @@ class BassLineGenerator:
         self.waiting_seed = False
         self.seed_note: int | None = None
         self.pattern: list[int | None] = []
+        self.pattern_offsets: list[int | None] = []
         self.channel = 0
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -46,20 +47,28 @@ class BassLineGenerator:
         ):
             return False
 
-        self.seed_note = message.note
         self.channel = message.channel
-        self.pattern = self._generate_pattern(message.note)
+
+        if self.seed_note is None or not self.pattern_offsets:
+            self.seed_note = message.note
+            self.pattern_offsets = self._generate_pattern_offsets()
+        else:
+            self.seed_note = message.note
+
+        self.pattern = self._transpose_pattern(self.seed_note)
         self.waiting_seed = False
-        self.start_loop()
+
+        if self._thread is None or not self._thread.is_alive():
+            self.start_loop()
+
         return True
 
-    def _generate_pattern(self, root: int) -> list[int | None]:
-        pool = [root + interval for interval in self.SCALE_INTERVALS if root + interval <= 127]
+    def _generate_pattern_offsets(self) -> list[int | None]:
         pattern: list[int | None] = []
 
         for step in range(self.STEPS):
             if step == 0:
-                pattern.append(root)
+                pattern.append(0)
                 continue
 
             if random.random() < 0.42:
@@ -67,10 +76,19 @@ class BassLineGenerator:
                 continue
 
             if random.random() < 0.50:
-                pattern.append(root)
+                pattern.append(0)
             else:
-                pattern.append(random.choice(pool))
+                pattern.append(random.choice(self.SCALE_INTERVALS))
 
+        return pattern
+
+    def _transpose_pattern(self, root: int) -> list[int | None]:
+        pattern: list[int | None] = []
+        for offset in self.pattern_offsets:
+            if offset is None:
+                pattern.append(None)
+            else:
+                pattern.append(max(0, min(127, root + offset)))
         return pattern
 
     def start_loop(self) -> None:
