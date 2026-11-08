@@ -85,47 +85,64 @@ Ejecución:
 py bass_liner.py
 ```
 
-El Bass Liner reutiliza la entrada y salida MIDI del traductor y agrega un generador de patrones.
-
-Flujo principal:
+El Bass Liner divide el CMD LC-1 en dos rutas MIDI independientes.
 
 ```text
-CMD LC-1 -> Bass Liner -> CMD LC-1 translated -> Ableton
-```
+CMD LC-1
+   |
+   +-- zona BassLiner reservada --> BassLiner --> Ableton
+   |
+   +-- resto del controlador ----> CMD LC-1 translated --> Ableton
 
-Sincronización:
-
-```text
-Ableton -> BassLiner Clock -> Bass Liner
+Ableton --> BassLiner Clock --> Bass Liner
 ```
 
 ### Puertos loopMIDI
 
-Crear dos puertos virtuales:
+Crear tres puertos virtuales:
 
 ```text
 CMD LC-1 translated
+BassLiner
 BassLiner Clock
 ```
 
 En la interfaz seleccionar:
 
 ```text
-Entrada MIDI -> CMD LC-1
-Salida MIDI  -> CMD LC-1 translated
-Clock MIDI   -> BassLiner Clock
+Entrada MIDI       -> CMD LC-1
+Salida translated  -> CMD LC-1 translated
+Salida BassLiner   -> BassLiner
+Clock MIDI         -> BassLiner Clock
+```
+
+La interfaz muestra tres monitores:
+
+```text
+ENTRADA MIDI
+SALIDA TRANSLATED
+SALIDA BASS LINER
 ```
 
 ### Configuración de Ableton Live
 
-Para recibir la salida musical:
+Para el passthrough normal:
 
 ```text
 In: CMD LC-1 translated
 Pista: ON
 ```
 
-Para enviar MIDI Clock:
+Para el instrumento BassLiner:
+
+```text
+In: BassLiner
+Pista: ON
+```
+
+La salida BassLiner utiliza el canal MIDI 9.
+
+Para sincronización:
 
 ```text
 Out: BassLiner Clock
@@ -134,26 +151,66 @@ Pista: OFF
 Remote: OFF
 ```
 
-### Generador de bajo
+### Zona reservada del CMD LC-1
 
-Activar:
+La zona BassLiner trabaja sobre el canal MIDI 8 de entrada.
+
+Los dos encoders reservados no se traducen ni se reenvían:
 
 ```text
-(G)enerar bajo
+CC 16 -> reservado
+CC 20 -> reservado
 ```
 
-Después presionar una nota en el controlador.
+Los 13 botones quedan asignados así:
 
-La primera nota define la raíz del patrón.
+```text
+note 16 -> activar/desactivar generador
+note 20 -> regenerar patrón
 
-El generador crea un patrón de 16 pasos restringido a una pentatónica menor, con silencios y repeticiones aleatorias.
+note 32 -> C
+note 36 -> D
+note 40 -> E
+note 44 -> F
+note 48 -> G
+note 52 -> A
+note 56 -> B
+note 60 -> C de la octava siguiente
 
-Una vez generado:
+note 64 -> bajar octava
+note 68 -> subir octava
+note 72 -> reservado
+```
 
-- el patrón queda fijo;
-- una nueva nota cambia la raíz;
-- se conserva el mismo ritmo, silencios y relaciones interválicas;
-- no se genera un patrón nuevo al cambiar de nota.
+Los controles internos no salen por ninguna salida MIDI.
+
+Los ocho botones de nota se convierten a notas musicales y salen exclusivamente por `BassLiner`, canal 9.
+
+Todo mensaje que no pertenece a la zona reservada sigue por `CMD LC-1 translated`.
+
+### Octava y raíz
+
+La octava inicial es 2.
+
+Los botones de nota definen la raíz del patrón según la octava actual.
+
+Los controles de octava cambian la altura del instrumento y transponen la raíz del patrón sin regenerar su estructura.
+
+### Generador de bajo
+
+El generador crea un patrón de 16 semicorcheas restringido a una pentatónica menor relativa a la raíz seleccionada.
+
+El patrón conserva:
+
+- posiciones rítmicas;
+- silencios;
+- relaciones interválicas.
+
+Al cambiar de nota u octava, el patrón se transpone.
+
+El botón físico `note 20` genera una nueva estructura aleatoria conservando la raíz actual.
+
+El botón físico `note 16` activa o desactiva la reproducción generada.
 
 ### MIDI Clock
 
@@ -161,15 +218,12 @@ El Bass Liner no usa BPM interno.
 
 La reproducción depende exclusivamente de MIDI Clock enviado por Ableton.
 
-MIDI Clock trabaja a 24 pulsos por negra.
-
-El generador usa:
-
 ```text
-6 clocks = 1 semicorchea
+24 clocks = 1 negra
+6 clocks  = 1 semicorchea
 ```
 
-Mensajes de transporte:
+Mensajes utilizados:
 
 ```text
 start    -> inicia desde el paso 1
@@ -196,8 +250,8 @@ Bass Liner:
 A -> actualizar puertos
 C -> conectar
 D -> desconectar
-E -> activar/desactivar conversión de encoders
-G -> activar/desactivar generador de bajo
+E -> activar/desactivar conversión de encoders no reservados
+G -> activar/desactivar generador
 ```
 
 ## Estructura
@@ -205,6 +259,7 @@ G -> activar/desactivar generador de bajo
 ```text
 main.py
 bass_liner.py
+bass_liner_backup.py
 requirements.txt
 run.cmd
 app/
@@ -212,6 +267,7 @@ app/
   ui.py
   bass_ui.py
   bassline.py
+  bass_controller.py
   transform.py
 ```
 
@@ -224,4 +280,8 @@ git pull origin main
 py main.py
 ```
 
-El archivo debe ejecutarse desde el repositorio.
+El Bass Liner se ejecuta con:
+
+```cmd
+py bass_liner.py
+```
