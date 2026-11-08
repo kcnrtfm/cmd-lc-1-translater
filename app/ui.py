@@ -14,10 +14,11 @@ class MonitorLog(RichLog, can_focus=False):
 
 
 class MidiEvent(Message):
-    def __init__(self, direction: str, detail: str) -> None:
+    def __init__(self, direction: str, detail: str, channel: int | None = None) -> None:
         super().__init__()
         self.direction = direction
         self.detail = detail
+        self.channel = channel
 
 
 class MidiApp(App):
@@ -78,10 +79,10 @@ class MidiApp(App):
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
-                yield Static("ENTRADA MIDI", classes="monitor-title")
+                yield Static("ENTRADA MIDI - canal: --", id="input-title", classes="monitor-title")
                 yield MonitorLog(id="input-log", max_lines=500, wrap=False)
             with Vertical(classes="monitor"):
-                yield Static("SALIDA MIDI", classes="monitor-title")
+                yield Static("SALIDA MIDI - canal: --", id="output-title", classes="monitor-title")
                 yield MonitorLog(id="output-log", max_lines=500, wrap=False)
 
     def on_mount(self) -> None:
@@ -152,15 +153,21 @@ class MidiApp(App):
         count = self.encoder_counter.process(message)
         if self.encoder_counter.enabled:
             self.post_message(MidiEvent("counter", str(count)))
-        self.post_message(MidiEvent("input", self._format_message(message)))
+        channel = message.channel + 1 if hasattr(message, "channel") else None
+        self.post_message(MidiEvent("input", self._format_message(message), channel))
 
     def _output_message(self, message) -> None:
-        self.post_message(MidiEvent("output", self._format_message(message)))
+        channel = message.channel + 1 if hasattr(message, "channel") else None
+        self.post_message(MidiEvent("output", self._format_message(message), channel))
 
     def on_midi_event(self, event: MidiEvent) -> None:
         if event.direction == "counter":
             self.query_one("#encoder-counter", Button).label = f"[X] Co(N)tar pasos: {event.detail}"
             return
+        if event.channel is not None:
+            self.query_one(f"#{event.direction}-title", Static).update(
+                f"{event.direction.upper()} MIDI - canal: {event.channel}"
+            )
         self.query_one(f"#{event.direction}-log", RichLog).write(event.detail)
 
     def action_toggle_encoder_absolute(self) -> None:
