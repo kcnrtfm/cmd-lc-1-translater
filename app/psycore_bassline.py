@@ -17,6 +17,7 @@ class PsycoreBassLineGenerator:
         self.enabled = False
         self.waiting_seed = False
         self.seed_note: int | None = None
+        self.pending_root: int | None = None
         self.pattern_offsets: list[int | None] = []
         self.pattern: list[int | None] = []
         self.channel = 8
@@ -46,8 +47,17 @@ class PsycoreBassLineGenerator:
         if not self.pattern_offsets:
             self.pattern_offsets = self._generate_pattern_offsets()
 
-        self.seed_note = max(0, min(127, note))
-        self.pattern = self._transpose_pattern(self.seed_note)
+        note = max(0, min(127, note))
+
+        # Before playback starts, or while the generator is disabled, set the
+        # root immediately. During playback, quantize root changes to the next bar.
+        if not self.enabled or self.last_step is None:
+            self.seed_note = note
+            self.pattern = self._transpose_pattern(self.seed_note)
+            self.pending_root = None
+        else:
+            self.pending_root = note
+
         self.waiting_seed = False
 
     def regenerate(self) -> None:
@@ -71,6 +81,12 @@ class PsycoreBassLineGenerator:
             return
 
         self.last_step = step
+
+        if step % self.STEPS_PER_BAR == 0 and self.pending_root is not None:
+            self.seed_note = self.pending_root
+            self.pending_root = None
+            self.pattern = self._transpose_pattern(self.seed_note)
+
         self._play_step(step)
 
     def _generate_pattern_offsets(self) -> list[int | None]:
