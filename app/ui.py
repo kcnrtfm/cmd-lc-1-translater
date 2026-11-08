@@ -20,13 +20,13 @@ class MidiApp(App):
 
     CSS = """
     Screen { layout: vertical; }
-    #controls { height: 9; padding: 1 2; border: ascii $accent; }
+    #controls { height: 12; padding: 1 2; border: ascii $accent; }
     .port-row { height: 2; align: left middle; }
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
-    Button { border: ascii $accent; }
-    #actions { height: 2; align: left middle; }
-    #status { width: 1fr; padding-left: 2; }
+    Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; }
+    #actions { height: 3; align: left middle; }
+    #status { height: 1; padding-left: 1; }
     #monitors { height: 1fr; }
     .monitor { width: 1fr; border: ascii $secondary; }
     .monitor-title { height: 1; padding-left: 1; background: $panel; }
@@ -49,7 +49,7 @@ class MidiApp(App):
                 yield Button("Actualizar", id="refresh")
                 yield Button("Conectar", variant="primary", id="connect")
                 yield Button("Desconectar", id="disconnect", disabled=True)
-                yield Label("Desconectado", id="status")
+            yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
                 yield Static("ENTRADA MIDI", classes="monitor-title")
