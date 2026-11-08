@@ -59,10 +59,14 @@ class BassController:
 
         if note == self.TOGGLE_GENERATOR_NOTE:
             if pressed:
-                if self.generator.enabled:
+                pending = getattr(self.generator, "pending_enabled", None)
+                target_enabled = self.generator.enabled if pending is None else pending
+
+                if target_enabled:
                     self.generator.disarm()
                 else:
                     self.generator.arm()
+
                 self._notify()
             return True
 
