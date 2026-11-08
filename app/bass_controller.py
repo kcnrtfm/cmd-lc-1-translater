@@ -25,10 +25,17 @@ class BassController:
     # Eight physical buttons mapped as C D E F G A B C.
     NOTE_OFFSETS = (0, 2, 4, 5, 7, 9, 11, 12)
 
-    def __init__(self, generator: BassLineGenerator, send_bass, on_state_change=None) -> None:
+    def __init__(
+        self,
+        generator: BassLineGenerator,
+        send_bass,
+        on_state_change=None,
+        audition_notes_while_generating: bool = True,
+    ) -> None:
         self.generator = generator
         self.send_bass = send_bass
         self.on_state_change = on_state_change
+        self.audition_notes_while_generating = audition_notes_while_generating
         self.octave = 2
         self.active_notes: dict[int, int] = {}
         self.step_index = self.STEP_VALUES.index(16)
@@ -115,30 +122,32 @@ class BassController:
 
         if pressed:
             midi_note = self._mapped_note(index)
-            self.active_notes[message.note] = midi_note
 
-            self.send_bass(
-                mido.Message(
-                    "note_on",
-                    channel=self.BASS_CHANNEL,
-                    note=midi_note,
-                    velocity=message.velocity,
+            if self.audition_notes_while_generating or not self.generator.enabled:
+                self.active_notes[message.note] = midi_note
+                self.send_bass(
+                    mido.Message(
+                        "note_on",
+                        channel=self.BASS_CHANNEL,
+                        note=midi_note,
+                        velocity=message.velocity,
+                    )
                 )
-            )
 
             self.generator.set_root(midi_note, channel=self.BASS_CHANNEL)
             self._notify()
             return
 
-        midi_note = self.active_notes.pop(message.note, self._mapped_note(index))
-        self.send_bass(
-            mido.Message(
-                "note_off",
-                channel=self.BASS_CHANNEL,
-                note=midi_note,
-                velocity=0,
+        midi_note = self.active_notes.pop(message.note, None)
+        if midi_note is not None:
+            self.send_bass(
+                mido.Message(
+                    "note_off",
+                    channel=self.BASS_CHANNEL,
+                    note=midi_note,
+                    velocity=0,
+                )
             )
-        )
 
     def _mapped_note(self, index: int) -> int:
         # MIDI C-1 = 0, therefore C2 = 36.
