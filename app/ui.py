@@ -3,7 +3,7 @@
 from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Checkbox, Label, RichLog, Select, Static
+from textual.widgets import Button, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
 
@@ -29,8 +29,9 @@ class MidiApp(App):
     .port-row { height: 2; align: left middle; }
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
-    Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; }
-    #encoder-absolute { height: 3; margin-left: 2; padding-top: 1; }
+    Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; background: $panel; color: white; }
+    Button:disabled { opacity: 1; background: $panel; color: white; border: ascii $accent; }
+    #encoder-absolute { min-width: 29; margin-left: 2; }
     Button:focus { border: ascii #888888; background: #666666; color: white; }
     Select:focus { border: ascii #888888; }
     Select:focus > SelectCurrent { background: #555555; color: white; }
@@ -48,6 +49,7 @@ class MidiApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.router = MidiRouter(self._input_message, self._output_message)
+        self.encoder_absolute = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="controls"):
@@ -61,7 +63,7 @@ class MidiApp(App):
                 yield Button("Actualizar", id="refresh")
                 yield Button("Conectar", id="connect")
                 yield Button("Desconectar", id="disconnect", disabled=True)
-                yield Checkbox("[E] Encoders -> absoluto", id="encoder-absolute")
+                yield Button("[ ] Encoders -> absoluto [E]", id="encoder-absolute")
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
@@ -113,6 +115,8 @@ class MidiApp(App):
         elif event.button.id == "disconnect":
             self.router.disconnect()
             self._set_connected(False)
+        elif event.button.id == "encoder-absolute":
+            self.action_toggle_encoder_absolute()
 
     @staticmethod
     def _format_message(message) -> str:
@@ -128,8 +132,9 @@ class MidiApp(App):
         self.query_one(f"#{event.direction}-log", RichLog).write(event.detail)
 
     def action_toggle_encoder_absolute(self) -> None:
-        checkbox = self.query_one("#encoder-absolute", Checkbox)
-        checkbox.value = not checkbox.value
+        self.encoder_absolute = not self.encoder_absolute
+        marker = "X" if self.encoder_absolute else " "
+        self.query_one("#encoder-absolute", Button).label = f"[{marker}] Encoders -> absoluto [E]"
 
     def on_unmount(self) -> None:
         self.router.disconnect()
