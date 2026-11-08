@@ -1,20 +1,17 @@
-"""Bass line generation and looping."""
+"""Bass line generation synchronized exclusively to MIDI Clock."""
 
 from __future__ import annotations
 
 import random
-import threading
-import time
 
 import mido
 
 
 class BassLineGenerator:
-    BPM = 120
     STEPS = 16
-    STEP_SECONDS = 60.0 / BPM / 4.0  # sixteenth notes
+    CLOCKS_PER_STEP = 6  # MIDI Clock is 24 PPQN; six clocks = one sixteenth note.
+    NOTE_OFF_CLOCK = 4
 
-    # Minor pentatonic intervals keep random output constrained and usable.
     SCALE_INTERVALS = (0, 3, 5, 7, 10)
 
     def __init__(self, send_message) -> None:
@@ -25,23 +22,24 @@ class BassLineGenerator:
         self.pattern: list[int | None] = []
         self.pattern_offsets: list[int | None] = []
         self.channel = 0
-        self._thread: threading.Thread | None = None
-        self._stop_event = threading.Event()
+
+        self.transport_running = False
+        self.step_index = 0
+        self.clock_in_step = 0
+        self.active_note: int | None = None
 
     def arm(self) -> None:
         self.enabled = True
-        self.waiting_seed = True
-        self.stop_loop()
+        self.waiting_seed = self.seed_note is None
 
     def disarm(self) -> None:
         self.enabled = False
         self.waiting_seed = False
-        self.stop_loop()
+        self._note_off()
 
     def accept_seed(self, message: mido.Message) -> bool:
         if (
             not self.enabled
-            or not self.waiting_seed
             or message.type != "note_on"
             or message.velocity == 0
         ):
@@ -50,18 +48,47 @@ class BassLineGenerator:
         self.channel = message.channel
 
         if self.seed_note is None or not self.pattern_offsets:
-            self.seed_note = message.note
             self.pattern_offsets = self._generate_pattern_offsets()
-        else:
-            self.seed_note = message.note
 
+        self.seed_note = message.note
         self.pattern = self._transpose_pattern(self.seed_note)
         self.waiting_seed = False
-
-        if self._thread is None or not self._thread.is_alive():
-            self.start_loop()
-
         return True
+
+    def process_transport(self, message: mido.Message) -> None:
+        if message.type == "start":
+            self.transport_running = True
+            self.step_index = 0
+            self.clock_in_step = 0
+            self._note_off()
+            return
+
+        if message.type == "continue":
+            self.transport_running = True
+            return
+
+        if message.type == "stop":
+            self.transport_running = False
+            self._note_off()
+            return
+
+        if message.type != "clock" or not self.transport_running:
+            return
+
+        if not self.enabled or not self.pattern:
+            return
+
+        if self.clock_in_step == 0:
+            self._play_current_step()
+
+        self.clock_in_step += 1
+
+        if self.clock_in_step == self.NOTE_OFF_CLOCK:
+            self._note_off()
+
+        if self.clock_in_step >= self.CLOCKS_PER_STEP:
+            self.clock_in_step = 0
+            self.step_index = (self.step_index + 1) % self.STEPS
 
     def _generate_pattern_offsets(self) -> list[int | None]:
         pattern: list[int | None] = []
@@ -91,51 +118,32 @@ class BassLineGenerator:
                 pattern.append(max(0, min(127, root + offset)))
         return pattern
 
-    def start_loop(self) -> None:
-        self.stop_loop()
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
+    def _play_current_step(self) -> None:
+        self._note_off()
+        note = self.pattern[self.step_index]
+        if note is None:
+            return
 
-    def stop_loop(self) -> None:
-        self._stop_event.set()
-        thread = self._thread
-        self._thread = None
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-            thread.join(timeout=0.5)
+        self.active_note = note
+        self.send_message(
+            mido.Message(
+                "note_on",
+                channel=self.channel,
+                note=note,
+                velocity=100,
+            )
+        )
 
-    def _run_loop(self) -> None:
-        note_length = self.STEP_SECONDS * 0.72
+    def _note_off(self) -> None:
+        if self.active_note is None:
+            return
 
-        while not self._stop_event.is_set():
-            for note in self.pattern:
-                if self._stop_event.is_set():
-                    return
-
-                started = time.monotonic()
-
-                if note is not None:
-                    self.send_message(
-                        mido.Message(
-                            "note_on",
-                            channel=self.channel,
-                            note=note,
-                            velocity=100,
-                        )
-                    )
-
-                elapsed = time.monotonic() - started
-                self._stop_event.wait(max(0.0, note_length - elapsed))
-
-                if note is not None and not self._stop_event.is_set():
-                    self.send_message(
-                        mido.Message(
-                            "note_off",
-                            channel=self.channel,
-                            note=note,
-                            velocity=0,
-                        )
-                    )
-
-                remaining = self.STEP_SECONDS - note_length
-                self._stop_event.wait(max(0.0, remaining))
+        self.send_message(
+            mido.Message(
+                "note_off",
+                channel=self.channel,
+                note=self.active_note,
+                velocity=0,
+            )
+        )
+        self.active_note = None
