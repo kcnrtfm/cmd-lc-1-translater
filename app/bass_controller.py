@@ -12,6 +12,9 @@ class BassController:
     BASS_CHANNEL = 8           # MIDI channel 9 as shown to the user.
 
     RESERVED_ENCODERS = {16, 20}
+    STEP_ENCODER_CC = 16
+    STEP_VALUES = (1, 2, 4, 8, 16)
+    ENCODER_TICKS_PER_CHANGE = 5
     TOGGLE_GENERATOR_NOTE = 16
     REGENERATE_NOTE = 20
     NOTE_BUTTONS = (32, 36, 40, 44, 48, 52, 56, 60)
@@ -28,6 +31,8 @@ class BassController:
         self.on_state_change = on_state_change
         self.octave = 2
         self.active_notes: dict[int, int] = {}
+        self.step_index = self.STEP_VALUES.index(16)
+        self.step_encoder_accumulator = 0
 
     def process(self, message: mido.Message) -> bool:
         """Return True when the message belongs to the reserved Bass Liner zone."""
@@ -35,6 +40,8 @@ class BassController:
             return False
 
         if message.type == "control_change" and message.control in self.RESERVED_ENCODERS:
+            if message.control == self.STEP_ENCODER_CC:
+                self._handle_step_encoder(message.value)
             return True
 
         if message.type not in ("note_on", "note_off"):
@@ -80,6 +87,28 @@ class BassController:
             return True
 
         return False
+
+    def _handle_step_encoder(self, value: int) -> None:
+        if value == 65:
+            self.step_encoder_accumulator += 1
+        elif value == 63:
+            self.step_encoder_accumulator -= 1
+        else:
+            return
+
+        if self.step_encoder_accumulator >= self.ENCODER_TICKS_PER_CHANGE:
+            if self.step_index < len(self.STEP_VALUES) - 1:
+                self.step_index += 1
+                self.generator.set_steps_per_bar(self.STEP_VALUES[self.step_index])
+                self._notify()
+            self.step_encoder_accumulator = 0
+
+        elif self.step_encoder_accumulator <= -self.ENCODER_TICKS_PER_CHANGE:
+            if self.step_index > 0:
+                self.step_index -= 1
+                self.generator.set_steps_per_bar(self.STEP_VALUES[self.step_index])
+                self._notify()
+            self.step_encoder_accumulator = 0
 
     def _handle_note_button(self, message: mido.Message, pressed: bool) -> None:
         index = self.NOTE_BUTTONS.index(message.note)
@@ -135,4 +164,5 @@ class BassController:
             "generator_enabled": self.generator.enabled,
             "octave": self.octave,
             "root": self.generator.seed_note,
+            "steps": self.generator.steps_per_bar,
         }
