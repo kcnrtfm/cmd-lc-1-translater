@@ -37,23 +37,20 @@ class BassLineGenerator:
         self.waiting_seed = False
         self._note_off()
 
-    def accept_seed(self, message: mido.Message) -> bool:
-        if (
-            not self.enabled
-            or message.type != "note_on"
-            or message.velocity == 0
-        ):
-            return False
+    def set_root(self, note: int, channel: int = 8) -> None:
+        self.channel = channel
 
-        self.channel = message.channel
-
-        if self.seed_note is None or not self.pattern_offsets:
+        if not self.pattern_offsets:
             self.pattern_offsets = self._generate_pattern_offsets()
 
-        self.seed_note = message.note
+        self.seed_note = max(0, min(127, note))
         self.pattern = self._transpose_pattern(self.seed_note)
         self.waiting_seed = False
-        return True
+
+    def regenerate(self) -> None:
+        self.pattern_offsets = self._generate_pattern_offsets()
+        if self.seed_note is not None:
+            self.pattern = self._transpose_pattern(self.seed_note)
 
     def process_transport(self, message: mido.Message) -> None:
         if message.type == "start":
