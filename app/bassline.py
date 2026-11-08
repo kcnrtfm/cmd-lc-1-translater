@@ -69,11 +69,18 @@ class BassLineGenerator:
             self._note_off()
             return
 
-        if message.type != "clock" or not self.transport_running:
+        if message.type != "clock":
             return
 
         if not self.enabled or not self.pattern:
             return
+
+        # If the program connects while Ableton is already playing, we may
+        # receive clocks without having seen the initial START message.
+        if not self.transport_running:
+            self.transport_running = True
+            self.step_index = 0
+            self.clock_in_step = 0
 
         if self.clock_in_step == 0:
             self._play_current_step()
