@@ -151,8 +151,9 @@ class BassLinerApp(App):
         return str(message)
 
     def _input_message(self, message) -> None:
+        self.bass_generator.process_transport(message)
         if self.bass_generator.accept_seed(message):
-            self.post_message(MidiEvent("generator", f"Loop generado a 120 BPM desde nota {message.note}"))
+            self.post_message(MidiEvent("generator", f"Patron preparado desde nota {message.note} - esperando MIDI Clock"))
         channel = message.channel + 1 if hasattr(message, "channel") else None
         self.post_message(MidiEvent("input", self._format_message(message), channel))
 
@@ -181,7 +182,7 @@ class BassLinerApp(App):
         if not self.bass_generator.enabled:
             self.bass_generator.arm()
             self.query_one("#bass-generator", Button).label = "[X] (G)enerar bajo"
-            self.query_one("#status", Label).update("Esperando nota semilla - 120 BPM")
+            self.query_one("#status", Label).update("Esperando nota semilla - sincronizacion MIDI Clock")
         else:
             self.bass_generator.disarm()
             self.query_one("#bass-generator", Button).label = "[ ] (G)enerar bajo"
