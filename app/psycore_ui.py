@@ -71,9 +71,7 @@ class PsycoreBassLinerApp(App):
             self.encoder_transform.process,
         )
 
-        self.link = Link(120)
-        self.link.enabled = True
-        self.link.start_stop_sync_enabled = True
+        self.link = None
         self.bass_generator = PsycoreBassLineGenerator(self.router.send_bass)
         self.bass_controller = BassController(
             self.bass_generator,
@@ -122,6 +120,9 @@ class PsycoreBassLinerApp(App):
 
     def on_mount(self) -> None:
         self.refresh_ports()
+        self.link = Link(120)
+        self.link.enabled = True
+        self.link.start_stop_sync_enabled = True
         self.run_worker(self._link_loop(), exclusive=True)
 
     def refresh_ports(self) -> None:
@@ -208,6 +209,9 @@ class PsycoreBassLinerApp(App):
         self.post_message(MidiEvent("bass", self._format_message(message), channel))
 
     async def _link_loop(self) -> None:
+        if self.link is None:
+            return
+
         while True:
             beat = await self.link.sync(0.25)
             self.bass_generator.process_link_beat(beat, self.link.playing)
@@ -216,9 +220,14 @@ class PsycoreBassLinerApp(App):
         generator = "ON" if state["generator_enabled"] else "OFF"
         root = state["root"]
         root_text = "--" if root is None else str(root)
+        if self.link is None:
+            link_text = "Link --"
+        else:
+            link_text = f"Link {self.link.tempo:.1f} BPM | peers {self.link.num_peers}"
+
         detail = (
-            f"Generador {generator} | Link {self.link.tempo:.1f} BPM | "
-            f"peers {self.link.num_peers} | octava {state['octave']} | root MIDI {root_text}"
+            f"Generador {generator} | {link_text} | "
+            f"octava {state['octave']} | root MIDI {root_text}"
         )
         self.post_message(MidiEvent("state", detail))
 
@@ -258,5 +267,6 @@ class PsycoreBassLinerApp(App):
 
     def on_unmount(self) -> None:
         self.bass_generator.disarm()
-        self.link.enabled = False
+        if self.link is not None:
+            self.link.enabled = False
         self.router.disconnect()
