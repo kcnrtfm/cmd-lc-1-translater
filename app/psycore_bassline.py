@@ -15,6 +15,7 @@ class PsycoreBassLineGenerator:
     def __init__(self, send_message) -> None:
         self.send_message = send_message
         self.enabled = False
+        self.pending_enabled: bool | None = None
         self.waiting_seed = False
         self.seed_note: int | None = None
         self.pending_root: int | None = None
@@ -34,13 +35,21 @@ class PsycoreBassLineGenerator:
         return
 
     def arm(self) -> None:
-        self.enabled = True
+        if self.last_step is None:
+            self.enabled = True
+            self.pending_enabled = None
+        else:
+            self.pending_enabled = True
         self.waiting_seed = self.seed_note is None
 
     def disarm(self) -> None:
-        self.enabled = False
+        if self.last_step is None:
+            self.enabled = False
+            self.pending_enabled = None
+            self._note_off()
+        else:
+            self.pending_enabled = False
         self.waiting_seed = False
-        self._note_off()
 
     def set_root(self, note: int, channel: int = 8) -> None:
         self.channel = channel
@@ -67,7 +76,7 @@ class PsycoreBassLineGenerator:
 
     def process_link_beat(self, beat: float) -> None:
         """Trigger the pattern from the absolute Ableton Link beat position."""
-        if not self.enabled or not self.pattern:
+        if not self.pattern:
             self._note_off()
             self.last_step = None
             return
@@ -82,10 +91,21 @@ class PsycoreBassLineGenerator:
 
         self.last_step = step
 
-        if step % self.STEPS_PER_BAR == 0 and self.pending_root is not None:
-            self.seed_note = self.pending_root
-            self.pending_root = None
-            self.pattern = self._transpose_pattern(self.seed_note)
+        if step % self.STEPS_PER_BAR == 0:
+            if self.pending_enabled is not None:
+                self.enabled = self.pending_enabled
+                self.pending_enabled = None
+                if not self.enabled:
+                    self._note_off()
+
+            if self.pending_root is not None:
+                self.seed_note = self.pending_root
+                self.pending_root = None
+                self.pattern = self._transpose_pattern(self.seed_note)
+
+        if not self.enabled:
+            self._note_off()
+            return
 
         self._play_step(step)
 
