@@ -68,7 +68,7 @@ class MidiApp(App):
                 yield Button("(A)ctualizar", id="refresh")
                 yield Button("(C)onectar", id="connect")
                 yield Button("(D)esconectar", id="disconnect", disabled=True)
-                yield Button("[ ] Encoders -> absoluto [E]", id="encoder-absolute")
+                yield Button("[ ] (E)ncoders -> absoluto", id="encoder-absolute")
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
@@ -152,7 +152,7 @@ class MidiApp(App):
     def action_toggle_encoder_absolute(self) -> None:
         self.encoder_absolute = not self.encoder_absolute
         marker = "X" if self.encoder_absolute else " "
-        self.query_one("#encoder-absolute", Button).label = f"[{marker}] Encoders -> absoluto [E]"
+        self.query_one("#encoder-absolute", Button).label = f"[{marker}] (E)ncoders -> absoluto"
 
     def on_unmount(self) -> None:
         self.router.disconnect()
