@@ -5,7 +5,7 @@ from textual.message import Message
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, RichLog, Select, Static
 
-from app.midi import MidiRouter
+from app.midi import MidiInputListener, MidiRouter
 from app.bassline import BassLineGenerator
 from app.transform import RelativeEncoderToAbsolute
 
@@ -34,7 +34,7 @@ class BassLinerApp(App):
 
     CSS = """
     Screen { layout: vertical; }
-    #controls { height: 12; padding: 1 2; border: ascii $accent; }
+    #controls { height: 14; padding: 1 2; border: ascii $accent; }
     .port-row { height: 2; align: left middle; }
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
@@ -60,6 +60,7 @@ class BassLinerApp(App):
         super().__init__()
         self.encoder_transform = RelativeEncoderToAbsolute()
         self.router = MidiRouter(self._input_message, self._output_message, self.encoder_transform.process)
+        self.clock_input = MidiInputListener(self._clock_message)
         self.encoder_absolute = False
         self.bass_generator = BassLineGenerator(self._send_generated_message)
 
@@ -71,6 +72,9 @@ class BassLinerApp(App):
             with Horizontal(classes="port-row"):
                 yield Label("Salida MIDI", classes="port-label")
                 yield Select([], id="output-port", prompt="Seleccionar salida", compact=True)
+            with Horizontal(classes="port-row"):
+                yield Label("Clock MIDI", classes="port-label")
+                yield Select([], id="clock-port", prompt="Seleccionar entrada clock", compact=True)
             with Horizontal(id="actions"):
                 yield Button("(A)ctualizar", id="refresh")
                 yield Button("(C)onectar", id="connect")
@@ -93,6 +97,7 @@ class BassLinerApp(App):
         for widget_id, names in (
             ("input-port", self.router.input_ports()),
             ("output-port", self.router.output_ports()),
+            ("clock-port", self.router.input_ports()),
         ):
             selector = self.query_one(f"#{widget_id}", Select)
             previous = selector.value
@@ -105,6 +110,7 @@ class BassLinerApp(App):
         self.query_one("#disconnect", Button).disabled = not connected
         self.query_one("#input-port", Select).disabled = connected
         self.query_one("#output-port", Select).disabled = connected
+        self.query_one("#clock-port", Select).disabled = connected
         self.query_one("#status", Label).update("Conectado" if connected else "Desconectado")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -130,11 +136,13 @@ class BassLinerApp(App):
             return
         input_name = self.query_one("#input-port", Select).value
         output_name = self.query_one("#output-port", Select).value
-        if not isinstance(input_name, str) or not isinstance(output_name, str):
-            self.query_one("#status", Label).update("Seleccioná entrada y salida")
+        clock_name = self.query_one("#clock-port", Select).value
+        if not isinstance(input_name, str) or not isinstance(output_name, str) or not isinstance(clock_name, str):
+            self.query_one("#status", Label).update("Seleccioná entrada, salida y clock")
             return
         try:
             self.router.connect(input_name, output_name)
+            self.clock_input.connect(clock_name)
         except Exception as exc:
             self.query_one("#status", Label).update(f"Error: {exc}")
             return
@@ -143,6 +151,7 @@ class BassLinerApp(App):
     def action_disconnect_ports(self) -> None:
         if not self.router.connected:
             return
+        self.clock_input.disconnect()
         self.router.disconnect()
         self._set_connected(False)
 
@@ -151,11 +160,13 @@ class BassLinerApp(App):
         return str(message)
 
     def _input_message(self, message) -> None:
-        self.bass_generator.process_transport(message)
         if self.bass_generator.accept_seed(message):
             self.post_message(MidiEvent("generator", f"Patron preparado desde nota {message.note} - esperando MIDI Clock"))
         channel = message.channel + 1 if hasattr(message, "channel") else None
         self.post_message(MidiEvent("input", self._format_message(message), channel))
+
+    def _clock_message(self, message) -> None:
+        self.bass_generator.process_transport(message)
 
     def _output_message(self, message) -> None:
         channel = message.channel + 1 if hasattr(message, "channel") else None
@@ -193,4 +204,5 @@ class BassLinerApp(App):
 
     def on_unmount(self) -> None:
         self.bass_generator.disarm()
+        self.clock_input.disconnect()
         self.router.disconnect()
