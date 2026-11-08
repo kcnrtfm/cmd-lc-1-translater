@@ -20,14 +20,15 @@ class MidiApp(App):
 
     CSS = """
     Screen { layout: vertical; }
-    #controls { height: 9; padding: 1 2; border: solid $accent; }
+    #controls { height: 9; padding: 1 2; border: ascii $accent; }
     .port-row { height: 2; align: left middle; }
     .port-label { width: 15; }
-    Select { width: 1fr; }
+    Select { width: 1fr; border: ascii $accent; }
+    Button { border: ascii $accent; }
     #actions { height: 2; align: left middle; }
     #status { width: 1fr; padding-left: 2; }
     #monitors { height: 1fr; }
-    .monitor { width: 1fr; border: solid $secondary; }
+    .monitor { width: 1fr; border: ascii $secondary; }
     .monitor-title { height: 1; padding-left: 1; background: $panel; }
     RichLog { height: 1fr; }
     """
@@ -40,10 +41,10 @@ class MidiApp(App):
         with Vertical(id="controls"):
             with Horizontal(classes="port-row"):
                 yield Label("Entrada MIDI", classes="port-label")
-                yield Select([], id="input-port", prompt="Seleccionar entrada")
+                yield Select([], id="input-port", prompt="Seleccionar entrada", compact=True)
             with Horizontal(classes="port-row"):
                 yield Label("Salida MIDI", classes="port-label")
-                yield Select([], id="output-port", prompt="Seleccionar salida")
+                yield Select([], id="output-port", prompt="Seleccionar salida", compact=True)
             with Horizontal(id="actions"):
                 yield Button("Actualizar", id="refresh")
                 yield Button("Conectar", variant="primary", id="connect")
