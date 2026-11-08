@@ -68,3 +68,31 @@ class MidiRouter:
     def connected(self) -> bool:
         with self._lock:
             return self._input is not None and self._output is not None
+
+
+class MidiInputListener:
+    def __init__(self, on_message: MessageHandler) -> None:
+        self.on_message = on_message
+        self._input = None
+        self._lock = RLock()
+
+    def connect(self, input_name: str) -> None:
+        self.disconnect()
+        input_port = mido.open_input(input_name, callback=self._handle_message)
+        with self._lock:
+            self._input = input_port
+
+    def _handle_message(self, message: mido.Message) -> None:
+        self.on_message(message.copy())
+
+    def disconnect(self) -> None:
+        with self._lock:
+            input_port = self._input
+            self._input = None
+        if input_port is not None:
+            input_port.close()
+
+    @property
+    def connected(self) -> bool:
+        with self._lock:
+            return self._input is not None
