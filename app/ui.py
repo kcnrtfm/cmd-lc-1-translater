@@ -3,7 +3,7 @@
 from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Label, RichLog, Select, Static
+from textual.widgets import Button, Checkbox, Label, RichLog, Select, Static
 
 from app.midi import MidiRouter
 
@@ -21,6 +21,7 @@ class MidiEvent(Message):
 
 class MidiApp(App):
     TITLE = "CMD LC-1 Translator"
+    BINDINGS = [("e", "toggle_encoder_absolute", "Encoders -> absoluto")]
 
     CSS = """
     Screen { layout: vertical; }
@@ -29,6 +30,7 @@ class MidiApp(App):
     .port-label { width: 15; }
     Select { width: 1fr; border: ascii $accent; }
     Button { height: 3; min-width: 16; margin-right: 1; border: ascii $accent; }
+    #encoder-absolute { height: 3; margin-left: 2; padding-top: 1; }
     Button:focus { border: ascii #888888; background: #666666; color: white; }
     Select:focus { border: ascii #888888; }
     Select:focus > SelectCurrent { background: #555555; color: white; }
@@ -59,6 +61,7 @@ class MidiApp(App):
                 yield Button("Actualizar", id="refresh")
                 yield Button("Conectar", id="connect")
                 yield Button("Desconectar", id="disconnect", disabled=True)
+                yield Checkbox("[E] Encoders -> absoluto", id="encoder-absolute")
             yield Label("Desconectado", id="status")
         with Horizontal(id="monitors"):
             with Vertical(classes="monitor"):
@@ -123,6 +126,10 @@ class MidiApp(App):
 
     def on_midi_event(self, event: MidiEvent) -> None:
         self.query_one(f"#{event.direction}-log", RichLog).write(event.detail)
+
+    def action_toggle_encoder_absolute(self) -> None:
+        checkbox = self.query_one("#encoder-absolute", Checkbox)
+        checkbox.value = not checkbox.value
 
     def on_unmount(self) -> None:
         self.router.disconnect()
